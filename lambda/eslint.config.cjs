@@ -5,14 +5,14 @@ const globals = require("globals");
 module.exports = [
   js.configs.recommended,
 
-  // ✅ Lambda (CommonJS / Node)
+  // Lambda files (CommonJS)
   {
-    files: ["lambda/**/*.js", "src/**/*.js"],
+    files: ["lambda/**/*.js"],
     languageOptions: {
       ecmaVersion: "latest",
-      sourceType: "script",
+      sourceType: "script", // CommonJS
       globals: {
-        ...globals.node, // adds console, require, process, etc.
+        ...globals.node, // Adds console, require, module, process, etc.
       },
     },
     rules: {
@@ -21,15 +21,15 @@ module.exports = [
     },
   },
 
-  // ✅ Tests (ES Modules)
+  // Tests (ES Modules)
   {
     files: ["tests/**/*.js"],
     languageOptions: {
       ecmaVersion: "latest",
-      sourceType: "module",
+      sourceType: "module", // import/export
       globals: {
+        ...globals.jest, // test, expect
         ...globals.node,
-        ...globals.jest, // adds test, expect if you use Jest or similar
       },
     },
     rules: {
