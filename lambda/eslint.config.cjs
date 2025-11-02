@@ -1,22 +1,19 @@
 // eslint.config.js
 const js = require("@eslint/js");
+const globals = require("globals");
 
 module.exports = [
   js.configs.recommended,
 
-  // ✅ For Lambda (Node.js environment)
+  // ✅ Lambda (CommonJS / Node)
   {
     files: ["lambda/**/*.js", "src/**/*.js"],
     languageOptions: {
       ecmaVersion: "latest",
       sourceType: "script",
-      globals: {},
-    },
-    linterOptions: {
-      reportUnusedDisableDirectives: true,
-    },
-    env: {
-      node: true, // ✅ This adds console, require, module, etc.
+      globals: {
+        ...globals.node, // adds console, require, process, etc.
+      },
     },
     rules: {
       "no-unused-vars": "error",
@@ -24,16 +21,16 @@ module.exports = [
     },
   },
 
-  // ✅ For Tests (ES Modules)
+  // ✅ Tests (ES Modules)
   {
     files: ["tests/**/*.js"],
     languageOptions: {
       ecmaVersion: "latest",
       sourceType: "module",
-    },
-    env: {
-      node: true,
-      jest: true, // if you’re using Jest
+      globals: {
+        ...globals.node,
+        ...globals.jest, // adds test, expect if you use Jest or similar
+      },
     },
     rules: {
       "no-unused-vars": "error",
