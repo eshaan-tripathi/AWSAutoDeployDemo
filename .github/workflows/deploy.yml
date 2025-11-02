@@ -63,10 +63,10 @@ jobs:
 
       # 7️⃣ Zip Lambda code (Terraform expects lambda_function_payload.zip)
       - name: Zip Lambda code
-        if: contains(env.services, 'lambda')
         run: |
           cd lambda
-          zip -r ../lambda_function_payload.zip . -x "tests/*" "node_modules/*"
+          zip -r ../terraform/lambda_function_payload.zip . -x "tests/*" "node_modules/*"
+
 
       # 8️⃣ Setup Terraform
       - name: Setup Terraform
