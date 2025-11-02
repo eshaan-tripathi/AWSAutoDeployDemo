@@ -10,7 +10,6 @@ resource "aws_lambda_function" "demo_lambda" {
 }
 resource "aws_s3_bucket" "demo_s3" {
   bucket        = var.s3_bucket_name
-  acl           = var.s3_acl
   force_destroy = var.s3_force_destroy
 
   versioning {
