@@ -10,4 +10,3 @@ s3_acl            = "private"
 s3_versioning     = true
 s3_encryption     = "none"
 s3_force_destroy  = false
-region            = "us-east-1"
