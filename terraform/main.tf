@@ -7,13 +7,22 @@ resource "aws_lambda_function" "demo_lambda" {
   timeout          = var.timeout
   filename         = "lambda_function_payload.zip"
   source_code_hash = filebase64sha256("lambda_function_payload.zip")
+
+  # Prevent accidental deletion or recreation if exists
+  lifecycle {
+    prevent_destroy = true
+  }
 }
+
+# S3 Bucket resource
 resource "aws_s3_bucket" "demo_s3" {
   bucket        = var.s3_bucket_name
   force_destroy = var.s3_force_destroy
 
-  versioning {
-    enabled = var.s3_versioning
+  # Use separate aws_s3_bucket_versioning resource
+  # because versioning block in aws_s3_bucket is deprecated
+  lifecycle {
+    prevent_destroy = true
   }
 
   dynamic "server_side_encryption_configuration" {
@@ -25,5 +34,13 @@ resource "aws_s3_bucket" "demo_s3" {
         }
       }
     }
+  }
+}
+
+# Separate resource for versioning
+resource "aws_s3_bucket_versioning" "demo_s3_versioning" {
+  bucket = aws_s3_bucket.demo_s3.id
+  versioning_configuration {
+    status = var.s3_versioning ? "Enabled" : "Suspended"
   }
 }
