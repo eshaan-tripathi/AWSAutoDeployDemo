@@ -1,38 +1,33 @@
 name: Deploy AWS Lambda
- 
+
 on:
   push:
     branches: ["main"]
- 
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
- 
+
     steps:
-      # 1️⃣ Checkout the code
       - name: Checkout code
         uses: actions/checkout@v3
- 
-      # 2️⃣ Setup Node.js
+
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
           node-version: 18
- 
-      # 3️⃣ Install Dependencies if Lambda exists
+
       - name: Install Dependencies
         if: hashFiles('lambda/package.json') != ''
         run: |
           cd lambda
           npm install
- 
+
       - name: Lambda Syntax Check
         run: |
           cd lambda
           npx eslint . --ext .js
- 
- 
-      # 4️⃣ Run Lambda Tests
+
       - name: Run Lambda Tests
         id: run_tests
         if: hashFiles('lambda/tests/**') != ''
@@ -40,8 +35,7 @@ jobs:
         run: |
           set -e
           node lambda/tests/test_lambda.js
- 
-      # 5️⃣ Detect Changed Services
+
       - name: Detect Changed Services
         id: detect
         run: |
@@ -49,49 +43,25 @@ jobs:
           if git rev-parse HEAD~1 >/dev/null 2>&1; then
             changed_files=$(git diff --name-only HEAD~1 HEAD)
           else
-            echo "No previous commit found (first push). Considering all services."
             changed_files=$(find lambda -type f)
           fi
- 
           services=()
           if echo "$changed_files" | grep -q "lambda/"; then
             services+=("lambda")
           fi
- 
           echo "services=${services[*]}" >> $GITHUB_ENV
           echo "Detected services: ${services[*]}"
- 
-      # 6️⃣ Zip Lambda code
+
       - name: Zip Lambda code
-        if: contains(env.services, 'lambda')
         run: |
           cd lambda
-          zip -r ../lambda_deploy.zip . -x "tests/*" "node_modules/*"
- 
-      # 7️⃣ Setup Terraform
+          zip -r ../terraform/lambda_function_payload.zip . -x "tests/*" "node_modules/*"
+
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.9.0
- 
-      # 8️⃣ Ensure Terraform Backend S3 Bucket Exists
-      - name: Ensure Terraform Backend
-        run: |
-          if aws s3 ls "s3://esh-terra" 2>&1 | grep -q 'NoSuchBucket'; then
-            echo "🪣 Creating Terraform state bucket..."
-            aws s3api create-bucket \
-              --bucket esh-terra \
-              --region us-east-1 \
-              --create-bucket-configuration LocationConstraint=us-east-1
-          else
-            echo "✅ Backend bucket already exists"
-          fi
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: us-east-1
- 
-      # 9️⃣ Terraform Init
+
       - name: Terraform Init
         working-directory: terraform
         env:
@@ -99,9 +69,8 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: us-east-1
         run: terraform init -reconfigure -input=false
- 
-      # 🔟 Import existing Lambda if it exists
-      - name: Import existing Lambda
+
+      - name: Import existing Lambda and S3 (if they exist)
         working-directory: terraform
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
@@ -109,47 +78,46 @@ jobs:
           AWS_DEFAULT_REGION: us-east-1
         run: |
           set -e
-          FUNCTION_NAME="demo_service"
+          FUNCTION_NAME="my-demo-lam-e"
+          BUCKET_NAME="eshaan-terra-backend"
+
+          # Import Lambda
           if aws lambda get-function --function-name "$FUNCTION_NAME" >/dev/null 2>&1; then
             echo "🟢 Lambda '$FUNCTION_NAME' exists — importing into Terraform state..."
-            terraform init -reconfigure -input=false
-            if terraform state list | grep -q "aws_lambda_function.demo_lambda"; then
-              echo "🔹 Already imported into Terraform state."
-            else
-              terraform import \
-                -var="region=us-east-1" \
-                -var="lambda_zip=../lambda_deploy.zip" \
-                -var="lambda_handler=index.handler" \
-                -var="lambda_runtime=nodejs18.x" \
-                -var="lambda_role=${{ secrets.LAMBDA_ROLE_ARN }}" \
-                aws_lambda_function.demo_lambda "$FUNCTION_NAME"
+            if ! terraform state list | grep -q "aws_lambda_function.demo_lambda"; then
+              terraform import aws_lambda_function.demo_lambda "$FUNCTION_NAME"
             fi
           else
-            echo "🆕 Lambda '$FUNCTION_NAME' does not exist — will be created by Terraform."
+            echo "🆕 Lambda '$FUNCTION_NAME' does not exist — Terraform will create it."
           fi
- 
-      # 1️⃣1️⃣ Capture current Lambda alias version (for rollback)
+
+          # Import S3 bucket
+          if aws s3api head-bucket --bucket "$BUCKET_NAME" >/dev/null 2>&1; then
+            echo "🟢 S3 bucket '$BUCKET_NAME' exists — importing into Terraform state..."
+            if ! terraform state list | grep -q "aws_s3_bucket.demo_s3"; then
+              terraform import aws_s3_bucket.demo_s3 "$BUCKET_NAME"
+            fi
+          else
+            echo "🆕 S3 bucket '$BUCKET_NAME' does not exist — Terraform will create it."
+          fi
+
       - name: Capture current Lambda alias version
         id: capture_version
         run: |
-          FUNCTION_NAME="demo_service"
+          FUNCTION_NAME="my-demo-lam-e"
           ALIAS_NAME="prod"
- 
           if aws lambda get-alias --function-name "$FUNCTION_NAME" --name "$ALIAS_NAME" >/dev/null 2>&1; then
             CURRENT_VERSION=$(aws lambda get-alias --function-name "$FUNCTION_NAME" --name "$ALIAS_NAME" --query 'FunctionVersion' --output text)
             echo "CURRENT_VERSION=$CURRENT_VERSION" >> $GITHUB_ENV
-            echo "Alias exists. Current version: $CURRENT_VERSION"
           else
-            echo "Alias does not exist yet. No rollback possible."
             echo "CURRENT_VERSION=" >> $GITHUB_ENV
           fi
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: us-east-1
- 
-      # 1️⃣2️⃣ Terraform Apply (Lambda Only)
-      - name: Terraform Apply (Lambda Only)
+
+      - name: Terraform Apply (update only)
         id: apply
         working-directory: terraform
         continue-on-error: true
@@ -157,24 +125,15 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: us-east-1
-        run: |
-          set -e
-          terraform apply -auto-approve \
-            -var="region=us-east-1" \
-            -var="lambda_zip=../lambda_deploy.zip" \
-            -var="lambda_handler=index.handler" \
-            -var="lambda_runtime=nodejs18.x" \
-            -var="lambda_role=${{ secrets.LAMBDA_ROLE_ARN }}" \
-            -input=false
- 
-      # 1️⃣3️⃣ Rollback Lambda alias if apply fails
+        run: terraform apply -auto-approve -input=false
+
       - name: Rollback Lambda alias if apply fails
         if: failure()
         run: |
           if [ -n "$CURRENT_VERSION" ]; then
             echo "Terraform apply failed. Rolling back Lambda alias..."
             aws lambda update-alias \
-              --function-name demo_service \
+              --function-name my-demo-lam-e \
               --name prod \
               --function-version "$CURRENT_VERSION"
           else
@@ -184,8 +143,7 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: us-east-1
- 
-      # 1️⃣4️⃣ SNS Notification with Logs
+
       - name: SNS Notification with Logs
         if: always()
         env:
@@ -195,16 +153,12 @@ jobs:
           SNS_TOPIC_ARN: arn:aws:sns:us-east-1:612572392212:LambdaDeployNotifications-e
         run: |
           LOGS=$(tail -n 100 $GITHUB_WORKSPACE/_temp/_runner_file_commands/set_env_* 2>/dev/null || echo "No logs available")
- 
           if [ "${{ job.status }}" == "success" ] && [ "${{ steps.run_tests.outcome }}" == "success" ]; then
-            MESSAGE="✅ Lambda deployment pipeline succeeded! Branch: ${{ github.ref }}, Commit: ${{ github.sha }}"
+            MESSAGE="✅ Lambda deployment succeeded! Branch: ${{ github.ref }}, Commit: ${{ github.sha }}"
           else
-            MESSAGE="❌ Lambda deployment pipeline failed! Branch: ${{ github.ref }}, Commit: ${{ github.sha }}\n\nLast 100 lines of logs:\n$LOGS"
+            MESSAGE="❌ Lambda deployment failed! Branch: ${{ github.ref }}, Commit: ${{ github.sha }}\n\nLast 100 lines of logs:\n$LOGS"
           fi
- 
           aws sns publish \
             --topic-arn "$SNS_TOPIC_ARN" \
             --message "$MESSAGE" \
             --region $AWS_DEFAULT_REGION
- 
- 
