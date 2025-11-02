@@ -1,18 +1,23 @@
 // lambda.config.cjs
 const js = require("@eslint/js");
-const globals = require("globals");
 
 module.exports = [
   js.configs.recommended,
 
   // Lambda files (ES Modules)
   {
-    files: ["lambda/*.js"], // matches index.js directly in lambda/
+    files: ["lambda/*.js"], // directly index.js
     languageOptions: {
       ecmaVersion: "latest",
-      sourceType: "module", // ES Modules
+      sourceType: "module", // must be module for export syntax
       globals: {
-        ...globals.node, // adds console, process, Buffer, etc.
+        console: "readonly",
+        process: "readonly",
+        Buffer: "readonly",
+        setTimeout: "readonly",
+        setInterval: "readonly",
+        clearTimeout: "readonly",
+        clearInterval: "readonly",
       },
     },
     rules: {
@@ -28,8 +33,9 @@ module.exports = [
       ecmaVersion: "latest",
       sourceType: "module",
       globals: {
-        ...globals.jest, // test, expect
-        ...globals.node,
+        console: "readonly",
+        test: "readonly",
+        expect: "readonly",
       },
     },
     rules: {
