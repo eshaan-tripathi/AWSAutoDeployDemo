@@ -9,30 +9,25 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ Checkout Code
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # 2️⃣ Setup Node.js
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
           node-version: 18
 
-      # 3️⃣ Install Dependencies if Lambda exists
       - name: Install Dependencies
         if: hashFiles('lambda/package.json') != ''
         run: |
           cd lambda
           npm install
 
-      # 4️⃣ Lint Lambda Code
       - name: Lambda Syntax Check
         run: |
           cd lambda
           npx eslint . --ext .js
 
-      # 5️⃣ Run Lambda Tests
       - name: Run Lambda Tests
         id: run_tests
         if: hashFiles('lambda/tests/**') != ''
@@ -41,7 +36,6 @@ jobs:
           set -e
           node lambda/tests/test_lambda.js
 
-      # 6️⃣ Detect Changed Services
       - name: Detect Changed Services
         id: detect
         run: |
@@ -61,20 +55,16 @@ jobs:
           echo "services=${services[*]}" >> $GITHUB_ENV
           echo "Detected services: ${services[*]}"
 
-      # 7️⃣ Zip Lambda code (Terraform expects lambda_function_payload.zip)
       - name: Zip Lambda code
         run: |
           cd lambda
           zip -r ../terraform/lambda_function_payload.zip . -x "tests/*" "node_modules/*"
 
-
-      # 8️⃣ Setup Terraform
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.9.0
 
-      # 9️⃣ Terraform Init
       - name: Terraform Init
         working-directory: terraform
         env:
@@ -83,7 +73,6 @@ jobs:
           AWS_DEFAULT_REGION: us-east-1
         run: terraform init -reconfigure -input=false
 
-      # 9.1️⃣ Ensure Terraform state exists before import
       - name: Terraform Initial Apply (empty)
         working-directory: terraform
         env:
@@ -92,7 +81,6 @@ jobs:
           AWS_DEFAULT_REGION: us-east-1
         run: terraform apply -auto-approve -input=false -refresh=false
 
-      # 🔟 Import existing Lambda and S3 if they exist
       - name: Import existing Lambda and S3
         working-directory: terraform
         env:
@@ -104,29 +92,30 @@ jobs:
           FUNCTION_NAME="my-demo-lam-e"
           BUCKET_NAME="eshaan-terra-backend"
 
+          # Import Lambda if it exists
           if aws lambda get-function --function-name "$FUNCTION_NAME" >/dev/null 2>&1; then
             echo "🟢 Lambda '$FUNCTION_NAME' exists — importing into Terraform state..."
             if ! terraform state list | grep -q "aws_lambda_function.demo_lambda"; then
               terraform import aws_lambda_function.demo_lambda "$FUNCTION_NAME"
             else
-              echo "Lambda already imported into Terraform state."
+              echo "Lambda already in Terraform state."
             fi
           else
-            echo "🆕 Lambda '$FUNCTION_NAME' does not exist — will be created by Terraform."
+            echo "🆕 Lambda '$FUNCTION_NAME' does not exist — Terraform will create it."
           fi
 
+          # Import S3 bucket if it exists
           if aws s3api head-bucket --bucket "$BUCKET_NAME" >/dev/null 2>&1; then
             echo "🟢 S3 bucket '$BUCKET_NAME' exists — importing into Terraform state..."
             if ! terraform state list | grep -q "aws_s3_bucket.demo_s3"; then
               terraform import aws_s3_bucket.demo_s3 "$BUCKET_NAME"
             else
-              echo "S3 already imported into Terraform state."
+              echo "S3 bucket already in Terraform state."
             fi
           else
-            echo "🆕 S3 bucket '$BUCKET_NAME' does not exist — will be created by Terraform."
+            echo "🆕 S3 bucket '$BUCKET_NAME' does not exist — Terraform will create it."
           fi
 
-      # 1️⃣1️⃣ Capture current Lambda alias version (optional)
       - name: Capture current Lambda alias version
         id: capture_version
         run: |
@@ -137,7 +126,7 @@ jobs:
             echo "CURRENT_VERSION=$CURRENT_VERSION" >> $GITHUB_ENV
             echo "Alias exists. Current version: $CURRENT_VERSION"
           else
-            echo "Alias does not exist yet. No rollback possible."
+            echo "Alias does not exist yet."
             echo "CURRENT_VERSION=" >> $GITHUB_ENV
           fi
         env:
@@ -145,7 +134,6 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: us-east-1
 
-      # 1️⃣2️⃣ Terraform Apply (Deploy Lambda + S3)
       - name: Terraform Apply
         id: apply
         working-directory: terraform
@@ -154,11 +142,8 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: us-east-1
-        run: |
-          set -e
-          terraform apply -auto-approve -input=false
+        run: terraform apply -auto-approve -input=false
 
-      # 1️⃣3️⃣ Rollback Lambda alias if apply fails
       - name: Rollback Lambda alias if apply fails
         if: failure()
         run: |
@@ -176,7 +161,6 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: us-east-1
 
-      # 1️⃣4️⃣ SNS Notification
       - name: SNS Notification with Logs
         if: always()
         env:
@@ -186,13 +170,11 @@ jobs:
           SNS_TOPIC_ARN: arn:aws:sns:us-east-1:612572392212:LambdaDeployNotifications-e
         run: |
           LOGS=$(tail -n 100 $GITHUB_WORKSPACE/_temp/_runner_file_commands/set_env_* 2>/dev/null || echo "No logs available")
-
           if [ "${{ job.status }}" == "success" ] && [ "${{ steps.run_tests.outcome }}" == "success" ]; then
             MESSAGE="✅ Lambda deployment succeeded! Branch: ${{ github.ref }}, Commit: ${{ github.sha }}"
           else
             MESSAGE="❌ Lambda deployment failed! Branch: ${{ github.ref }}, Commit: ${{ github.sha }}\n\nLast 100 lines of logs:\n$LOGS"
           fi
-
           aws sns publish \
             --topic-arn "$SNS_TOPIC_ARN" \
             --message "$MESSAGE" \
