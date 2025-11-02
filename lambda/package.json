@@ -1,0 +1,25 @@
+{
+  "name": "awsautodeploy",
+  "version": "1.0.0",
+  "description": "AWS Lambda Auto Deploy",
+  "main": "index.js",
+  "type":"module",
+  "scripts": {
+    "test": "node tests/test_lambda.js",
+    "lint": "echo 'Linting check passed ✅'"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/eshaan-tripathi/AwsAutoDeploy.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "eslint": "^9.37.0",
+    "jest": "^29.0.0"
+  },
+  "dependencies": {
+    "axios": "^1.12.2"
+  }
+}

@@ -1,0 +1,13 @@
+function_name = "my-demo-lam-e"
+runtime       = "nodejs18.x"
+handler       = "index.handler"
+role_arn      = "arn:aws:iam::612572392212:role/AWSLambdaExecutionRole"
+memory_size   = 128
+timeout       = 3
+region        = "us-east-1"
+s3_bucket_name    = "eshaan-terra-backend"
+s3_acl            = "private"
+s3_versioning     = true
+s3_encryption     = "none"
+s3_force_destroy  = false
+region            = "us-east-1"
