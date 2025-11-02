@@ -1,5 +1,5 @@
 export async function handler(event) {
-  console.log("Event received:", event);
+  console.log("Event received", event);
 
   // Example logic
   return {
