@@ -83,6 +83,15 @@ jobs:
           AWS_DEFAULT_REGION: us-east-1
         run: terraform init -reconfigure -input=false
 
+      # 9.1️⃣ Ensure Terraform state exists before import
+      - name: Terraform Initial Apply (empty)
+        working-directory: terraform
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: us-east-1
+        run: terraform apply -auto-approve -input=false -refresh=false
+
       # 🔟 Import existing Lambda and S3 if they exist
       - name: Import existing Lambda and S3
         working-directory: terraform
