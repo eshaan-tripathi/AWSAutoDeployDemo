@@ -83,22 +83,22 @@ jobs:
 
           # Import Lambda
           if aws lambda get-function --function-name "$FUNCTION_NAME" >/dev/null 2>&1; then
-            echo "🟢 Lambda '$FUNCTION_NAME' exists — importing into Terraform state..."
+            echo "Lambda '$FUNCTION_NAME' exists — importing into Terraform state..."
             if ! terraform state list | grep -q "aws_lambda_function.demo_lambda"; then
               terraform import aws_lambda_function.demo_lambda "$FUNCTION_NAME"
             fi
           else
-            echo "🆕 Lambda '$FUNCTION_NAME' does not exist — Terraform will create it."
+            echo "Lambda '$FUNCTION_NAME' does not exist — Terraform will create it."
           fi
 
           # Import S3 bucket
           if aws s3api head-bucket --bucket "$BUCKET_NAME" >/dev/null 2>&1; then
-            echo "🟢 S3 bucket '$BUCKET_NAME' exists — importing into Terraform state..."
+            echo "S3 bucket '$BUCKET_NAME' exists — importing into Terraform state..."
             if ! terraform state list | grep -q "aws_s3_bucket.demo_s3"; then
               terraform import aws_s3_bucket.demo_s3 "$BUCKET_NAME"
             fi
           else
-            echo "🆕 S3 bucket '$BUCKET_NAME' does not exist — Terraform will create it."
+            echo "S3 bucket '$BUCKET_NAME' does not exist — Terraform will create it."
           fi
 
       - name: Capture current Lambda alias version
@@ -154,9 +154,9 @@ jobs:
         run: |
           LOGS=$(tail -n 100 $GITHUB_WORKSPACE/_temp/_runner_file_commands/set_env_* 2>/dev/null || echo "No logs available")
           if [ "${{ job.status }}" == "success" ] && [ "${{ steps.run_tests.outcome }}" == "success" ]; then
-            MESSAGE="✅ Lambda deployment succeeded! Branch: ${{ github.ref }}, Commit: ${{ github.sha }}"
+            MESSAGE="Lambda deployment succeeded! Branch: ${{ github.ref }}, Commit: ${{ github.sha }}"
           else
-            MESSAGE="❌ Lambda deployment failed! Branch: ${{ github.ref }}, Commit: ${{ github.sha }}\n\nLast 100 lines of logs:\n$LOGS"
+            MESSAGE="Lambda deployment failed! Branch: ${{ github.ref }}, Commit: ${{ github.sha }}\n\nLast 100 lines of logs:\n$LOGS"
           fi
           aws sns publish \
             --topic-arn "$SNS_TOPIC_ARN" \

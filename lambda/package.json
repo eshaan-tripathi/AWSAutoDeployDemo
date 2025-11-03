@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "test": "node tests/test_lambda.js",
-    "lint": "echo 'Linting check passed ✅'"
+    "lint": "echo 'Linting check passed '"
   },
   "repository": {
     "type": "git",
