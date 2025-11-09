@@ -38,6 +38,7 @@ jobs:
 
       - name: Detect Changed Services
         id: detect
+
         run: |
           echo "services=[]" >> $GITHUB_ENV
           if git rev-parse HEAD~1 >/dev/null 2>&1; then
@@ -126,6 +127,31 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: us-east-1
         run: terraform apply -auto-approve -input=false
+
+      - name: Run Load Test with Artillery
+        run: |
+          # Fetch Lambda ARN dynamically from Terraform outputs
+          LAMBDA_ARN=$(terraform output -raw lambda_function_arn)
+
+          # Install Artillery
+          npm install -g artillery
+
+          # Create a simple load test config
+          echo "config:
+            target: \"aws-lambda://${LAMBDA_ARN}\"
+            phases:
+              - duration: 60
+                arrivalRate: 5
+          " > load-test.yaml
+
+          # Run the test
+          artillery run load-test.yaml
+        working-directory: terraform
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: us-east-1
+
       
       - name: Publish new Lambda version
         if: success()
