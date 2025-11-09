@@ -129,6 +129,7 @@ jobs:
         run: terraform apply -auto-approve -input=false
 
       - name: Run Load Test with Artillery
+        id: load_test
         run: |
           # Fetch Lambda ARN dynamically from Terraform outputs
           LAMBDA_ARN=$(terraform output -raw lambda_function_arn)
@@ -136,21 +137,36 @@ jobs:
           # Install Artillery
           npm install -g artillery
 
-          # Create a simple load test config
+          # Create valid load test configuration
           echo "config:
             target: \"aws-lambda://${LAMBDA_ARN}\"
             phases:
               - duration: 60
                 arrivalRate: 5
+          scenarios:
+            - name: \"Invoke Lambda\"
+              flow:
+                - function: \"invoke\"
           " > load-test.yaml
 
-          # Run the test
+          # Run the load test and capture exit code
           artillery run load-test.yaml
+          EXIT_CODE=$?
+
+          # Save exit code for later steps
+          echo "LOAD_TEST_EXIT_CODE=$EXIT_CODE" >> $GITHUB_ENV
+
+          # Fail the step if Artillery fails
+          if [ $EXIT_CODE -ne 0 ]; then
+            echo "Artillery load test failed!"
+            exit 1
+          fi
         working-directory: terraform
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: us-east-1
+
 
       
       - name: Publish new Lambda version
